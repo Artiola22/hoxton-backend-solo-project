@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import jwt from "jsonwebtoken"
 
 const prisma = new PrismaClient({ log: ["error", "info", "query", "warn"] });
 const app = express();
@@ -11,13 +12,13 @@ app.use(express.json());
 app.use(cors());
 
 app.get("/users", async (req, res) => {
-  const user = await prisma.user.findMany({ include: { messages: true } });
+  const user = await prisma.user.findMany({ include: { messages: true , users: true} });
   res.send(user);
 });
 
 app.get("/conversations", async (req, res) => {
   const conversation = await prisma.conversation.findMany({
-    include: { user: true },
+    include: { user: true, participant: true, messages: true },
   });
   res.send(conversation);
 });
@@ -55,6 +56,7 @@ async function getUserFromToken(token: string) {
   //@ts-ignore
   const data = jwt.verify(token, process.env.SECRET_KEY);
   const user = await prisma.user.findUnique({
+    //@ts-ignore
     where: { id: data.id },
     include: {
       Conversation: { include: { messages: true } },
@@ -69,7 +71,7 @@ app.post("/register", async (req, res) => {
   const hash = bcrypt.hashSync(password);
   try {
     const user = await prisma.user.create({
-      //@ts-ignore
+     
       data: { fullName, email, phoneNumber, password: hash },
     });
     res.send({ user, token: createToken(user.id) });
@@ -80,25 +82,58 @@ app.post("/register", async (req, res) => {
 });
 
 app.post("/sign-in", async (req, res) => {
-  const { phoneNumber, password } = req.body;
+  const { email, password } = req.body;
 
   try {
     const user = await prisma.user.findUnique({
-      where: { phoneNumber: phoneNumber },
-      include: { messages: true },
-    });
+      where: { email: email },
+      include: { messages: true }
+    })
+    console.log("user:", user)
     //@ts-ignore
-    const passwordMatches = bcrypt.compareSync(password, user.password);
-    if (user && passwordMatches) {
-      res.send({ user, token: createToken(user.id) });
-    } else {
-      throw Error("Boom!");
+    if(user){
+      const passwordMatches = bcrypt.compareSync(password, user.password);
+      if ( passwordMatches) {
+        res.send({ user, token: createToken(user.id) });
+      } else {
+        // throw Error("Boom!");
+        res.send("inside out")
+      }
+    }else{
+      res.status(400).send("error")
     }
+    
   } catch (err) {
+    console.log(err)
     //@ts-ignore
     res.status(400).send({ error: "Email/Password invalid!" });
   }
 });
+
+// app.post("/signIn", async(req, res)=>{
+//   const {email, password} = req.body
+
+//   try{
+
+//     const user = await prisma.user.findUnique({
+//       where: {email: email},
+//       include: {messages: true}
+//     })
+//     if(user){
+//       const passwordMatches = bcrypt.compareSync(password, user.password)
+//       if(passwordMatches){
+//         res.send({user, token: createToken(user.id) })
+//       }else{
+//         throw Error("error")
+//       }
+//     }else{
+//       res.send("User not found")
+//     }
+//   }catch(err){
+//     //@ts-ignore
+//  res.status(400).send({ error: "Email/Password invalid!" });
+//   }
+// })
 
 app.get("/validate", async (req, res) => {
   const token = req.headers.authorization;
