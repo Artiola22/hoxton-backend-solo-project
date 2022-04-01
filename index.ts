@@ -1,8 +1,9 @@
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient , Prisma} from "@prisma/client";
 import jwt from "jsonwebtoken"
+import 'dotenv/config'
 
 const prisma = new PrismaClient({ log: ["error", "info", "query", "warn"] });
 const app = express();
@@ -43,6 +44,23 @@ app.get("users/:email", async (req, res) => {
     res.send(400).send(`<pre>${err.message}</pre>`);
   }
 });
+
+app.get('users/:email', async(req, res)=>{
+  const email = req.params.email
+  try{
+    const user = await prisma.user.findFirst({
+      where: {email: email}, include:{messages: true, participants: true}
+    })
+    if(user){
+      res.send(user)
+    }else{
+      res.status(404).send({error: "User Not Found!"})
+    }
+  }catch(err){
+ //@ts-ignore
+ res.status(400).send({err: err.message})
+  
+}})
 
 function createToken(id: number) {
   //@ts-ignore
@@ -110,43 +128,35 @@ app.post("/sign-in", async (req, res) => {
   }
 });
 
-// app.post("/signIn", async(req, res)=>{
-//   const {email, password} = req.body
 
-//   try{
 
-//     const user = await prisma.user.findUnique({
-//       where: {email: email},
-//       include: {messages: true}
-//     })
-//     if(user){
-//       const passwordMatches = bcrypt.compareSync(password, user.password)
-//       if(passwordMatches){
-//         res.send({user, token: createToken(user.id) })
-//       }else{
-//         throw Error("error")
-//       }
-//     }else{
-//       res.send("User not found")
-//     }
-//   }catch(err){
+// app.get("/validate", async (req, res) => {
+//   const token = req.headers.authorization;
+
+//   try {
 //     //@ts-ignore
-//  res.status(400).send({ error: "Email/Password invalid!" });
+//     const user = await getUserFromToken(token);
+//     res.send(user);
+//   } catch (err) {
+//     //@ts-ignore
+//     res.status(400).send({ error: err.message });
 //   }
-// })
+// });
 
-app.get("/validate", async (req, res) => {
-  const token = req.headers.authorization;
-
-  try {
+app.get('/validate', async(req, res)=>{
+  const token = req.headers.authorization || ''
+  try{
+    const user = await getUserFromToken(token)
+    if(user){
+      res.status(200).send(user)
+    }else{
+      throw Error('Invalid token')
+    }
+  }catch(err){
     //@ts-ignore
-    const user = await getUserFromToken(token);
-    res.send(user);
-  } catch (err) {
-    //@ts-ignore
-    res.status(400).send({ error: err.message });
+    res.status(400).send({error: err.message})
   }
-});
+})
 
 app.listen(PORT, () => {
   console.log(`Server up : http://localhost:${PORT}`);
