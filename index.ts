@@ -24,6 +24,63 @@ app.get("/conversations", async (req, res) => {
   res.send(conversation);
 });
 
+
+app.post('/conversations', async(req, res) => {
+  const token = req.headers.authorization || ''
+  const {participantId} =req.body
+  try{
+
+    const user = await getUserFromToken(token)
+
+    const conversation = await prisma.conversation.create({
+      //@ts-ignore
+      data: {participantId: participantId, userId: user.id}, include: {messages: true, participant: true, user: true}
+    })
+    //@ts-ignore
+    user.conversations.push(conversation)
+    res.send(user)
+  }catch(err){
+    //@ts-ignore
+    res.status(400).send({ error: err.message})
+  }
+})
+app.get('/messages', async(req, res)=>{
+  const message = await prisma.user.findMany({
+    include: {messages: true, participants: true, users: true}
+  })
+  res.send(message)
+})
+
+app.get('/messages/:conversationId', async(req, res)=>{
+  const conversationId = Number(req.params.conversationId)
+
+  try{
+     const messages = await prisma.message.findMany({
+       where: {conversationId: conversationId}
+      
+     })
+     res.send(messages)
+  }catch(err){
+ //@ts-ignore
+ res.send(400).send(`<pre>${err.message}</pre>`);
+  }
+
+})
+
+app.get('/conversations/:conversationId', async(req, res)=>{
+  const conversationId = Number(req.params.conversationId)
+
+  try{
+ const conversations = await prisma.conversation.findMany({
+   where: {id: conversationId }, include: {messages :{include: {user: true}}, user:true }
+ })
+ res.send(conversations)
+  }catch(err){
+//@ts-ignore
+res.send(400).send(`<pre>${err.message}</pre>`);
+  }
+})
+
 app.get("users/:email", async (req, res) => {
   const email = req.params.email;
 
@@ -128,7 +185,25 @@ app.post("/sign-in", async (req, res) => {
   }
 });
 
+app.post('/messages', async(req, res)=> {
+  const token = req.headers.authorization || ''
+ const {content, conversationId} =req.body
+  try{
+const user = await getUserFromToken(token)
+if(user){
+const newMessage = await prisma.message.create({
+  data: {userId: user.id, content: content , conversationId: conversationId}
+})
+res.send(newMessage)
+}else{
+res.send({error: "User not found"})
+}
+  }catch(err){
+  //@ts-ignore
+    res.status(400).send({ error: err.message });
+  }
 
+})
 
 // app.get("/validate", async (req, res) => {
 //   const token = req.headers.authorization;
